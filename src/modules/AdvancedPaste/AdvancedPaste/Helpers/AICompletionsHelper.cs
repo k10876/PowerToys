@@ -10,6 +10,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using Azure;
@@ -104,18 +105,14 @@ namespace AdvancedPaste.Helpers
                 // Set up the request body
                 var requestBody = new
                 {
-                    Model = "qwen-turbo",
-                    Input = new
+                    model = "qwen-plus-latest",
+                    input = new
                     {
                         Messages = new[]
                         {
-                            new { Role = "system", Content = systemInstructions },
-                            new { Role = "user", Content = userMessage },
+                            new { role = "system", content = systemInstructions },
+                            new { role = "user", content = userMessage },
                         },
-                    },
-                    Parameters = new
-                    {
-                        ResultFormat = "message",
                     },
                 };
 
@@ -125,7 +122,14 @@ namespace AdvancedPaste.Helpers
 
                 // Make the request
                 HttpResponseMessage response = await client.PostAsync("https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation", content);
-                response.EnsureSuccessStatusCode();
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                } catch (HttpRequestException error)
+                {
+                    string errorResponseBody = await response.Content.ReadAsStringAsync();
+                    throw new HttpRequestException(errorResponseBody, error);
+                }
 
                 // Read the Response
                 string responseBody = await response.Content.ReadAsStringAsync();
@@ -134,10 +138,11 @@ namespace AdvancedPaste.Helpers
                 var responseJson = JsonDocument.Parse(responseBody);
 
                 // Extract Parameters
-                var promptTokens = responseJson.RootElement.GetProperty("usage").GetProperty("prompt_tokens").GetInt32();
-                var completionTokens = responseJson.RootElement.GetProperty("usage").GetProperty("completion_tokens").GetInt32();
-                var messageContent = responseJson.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-                var finishReason = responseJson.RootElement.GetProperty("choices")[0].GetProperty("finish_reason").GetString();
+                var promptTokens = responseJson.RootElement.GetProperty("usage").GetProperty("input_tokens").GetInt32();
+                var completionTokens = responseJson.RootElement.GetProperty("usage").GetProperty("output_tokens").GetInt32();
+                var messageContent = responseJson.RootElement.GetProperty("output").GetProperty("text").GetString();
+                messageContent = Regex.Unescape(messageContent);
+                var finishReason = responseJson.RootElement.GetProperty("output").GetProperty("finish_reason").GetString();
 
                 if (finishReason == "length")
                 {
@@ -185,6 +190,7 @@ Output:
             {
                 Logger.LogError("GetAICompletion failed", error);
                 PowerToysTelemetry.Log.WriteEvent(new Telemetry.AdvancedPasteGenerateCustomErrorEvent(error.Message));
+                apiRequestStatus = -1;
             }
 
             return new AICompletionsResponse(aiResponse, apiRequestStatus);
