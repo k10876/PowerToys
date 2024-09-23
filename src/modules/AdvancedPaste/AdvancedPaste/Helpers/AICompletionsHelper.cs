@@ -125,7 +125,8 @@ namespace AdvancedPaste.Helpers
                 try
                 {
                     response.EnsureSuccessStatusCode();
-                } catch (HttpRequestException error)
+                }
+                catch (HttpRequestException error)
                 {
                     string errorResponseBody = await response.Content.ReadAsStringAsync();
                     throw new HttpRequestException(errorResponseBody, error);
