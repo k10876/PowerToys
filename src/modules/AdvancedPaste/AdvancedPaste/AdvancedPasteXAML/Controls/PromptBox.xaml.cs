@@ -152,7 +152,6 @@ namespace AdvancedPaste.Controls
                 }
             }
         }
-    }
 
         private void PreviewFlyout_Opened(object sender, object e)
         {
