@@ -142,8 +142,17 @@ namespace AdvancedPaste.Helpers
                 var promptTokens = responseJson.RootElement.GetProperty("usage").GetProperty("input_tokens").GetInt32();
                 var completionTokens = responseJson.RootElement.GetProperty("usage").GetProperty("output_tokens").GetInt32();
                 var messageContent = responseJson.RootElement.GetProperty("output").GetProperty("text").GetString();
-                messageContent = Regex.Unescape(messageContent);
                 var finishReason = responseJson.RootElement.GetProperty("output").GetProperty("finish_reason").GetString();
+
+                // Unescape the AI-Generated Text
+                try
+                {
+                    messageContent = Regex.Unescape(messageContent);
+                }
+                catch (Exception error)
+                {
+                    PowerToysTelemetry.Log.WriteEvent(new Telemetry.AdvancedPasteGenerateCustomErrorEvent(error.Message));
+                }
 
                 if (finishReason == "length")
                 {
