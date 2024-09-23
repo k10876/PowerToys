@@ -145,11 +145,6 @@ namespace AdvancedPaste.Controls
         {
             if (sender is Button btn)
             {
-                bool result;
-                if (bool.TryParse(btn.CommandParameter as string, out result))
-                {
-                    PowerToysTelemetry.Log.WriteEvent(new Telemetry.AdvancedPasteCustomFormatOutputThumbUpDownEvent(result));
-                }
             }
         }
 

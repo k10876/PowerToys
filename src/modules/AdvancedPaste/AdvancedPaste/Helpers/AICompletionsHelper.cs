@@ -108,7 +108,7 @@ namespace AdvancedPaste.Helpers
                     model = "qwen-plus-latest",
                     input = new
                     {
-                        Messages = new[]
+                        messages = new[]
                         {
                             new { role = "system", content = systemInstructions },
                             new { role = "user", content = userMessage },
