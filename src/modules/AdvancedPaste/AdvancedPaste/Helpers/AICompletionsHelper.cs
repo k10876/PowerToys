@@ -185,7 +185,6 @@ Output:
             {
                 Logger.LogError("GetAICompletion failed", error);
                 PowerToysTelemetry.Log.WriteEvent(new Telemetry.AdvancedPasteGenerateCustomErrorEvent(error.Message));
-                apiRequestStatus = -1;
             }
 
             return new AICompletionsResponse(aiResponse, apiRequestStatus);
