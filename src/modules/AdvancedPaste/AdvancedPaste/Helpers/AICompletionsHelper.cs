@@ -6,11 +6,6 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
 
 using Azure;
 using Azure.AI.OpenAI;
@@ -35,22 +30,6 @@ namespace AdvancedPaste.Helpers
             public string Response { get; }
 
             public int ApiRequestStatus { get; }
-        }
-
-        public struct DashScopeResponse
-        {
-            public DashScopeResponse(int promptTokens, int completionTokens, string content)
-            {
-                PromptTokens = promptTokens;
-                CompletionTokens = completionTokens;
-                Content = content;
-            }
-
-            public int PromptTokens { get; set; }
-
-            public int CompletionTokens { get; set; }
-
-            public string Content { get; set; }
         }
 
         private string _openAIKey;
@@ -93,68 +72,31 @@ namespace AdvancedPaste.Helpers
             return string.Empty;
         }
 
-        public static async Task<DashScopeResponse> MakeQwenRequests(string systemInstructions, string userMessage, string openAIKey)
+        private Response<Completions> GetAICompletion(string systemInstructions, string userMessage)
         {
-            using (HttpClient client = new HttpClient())
+            OpenAIClient azureAIClient = new OpenAIClient(_openAIKey);
+
+            var response = azureAIClient.GetCompletions(
+                new CompletionsOptions()
+                {
+                    DeploymentName = _modelName,
+                    Prompts =
+                    {
+                        systemInstructions + "\n\n" + userMessage,
+                    },
+                    Temperature = 0.01F,
+                    MaxTokens = 2000,
+                });
+
+            if (response.Value.Choices[0].FinishReason == "length")
             {
-                // Set up the request headers
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", openAIKey);
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-                // Set up the request body
-                var requestBody = new
-                {
-                    Model = "qwen-turbo",
-                    Input = new
-                    {
-                        Messages = new[]
-                        {
-                            new { Role = "system", Content = systemInstructions },
-                            new { Role = "user", Content = userMessage },
-                        },
-                    },
-                    Parameters = new
-                    {
-                        ResultFormat = "message",
-                    },
-                };
-
-                // Serialize the request body to JSON
-                string json = System.Text.Json.JsonSerializer.Serialize(requestBody);
-                StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                // Make the request
-                HttpResponseMessage response = await client.PostAsync("https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation", content);
-                response.EnsureSuccessStatusCode();
-
-                // Read the Response
-                string responseBody = await response.Content.ReadAsStringAsync();
-
-                // Parse the JSON response
-                var responseJson = JsonDocument.Parse(responseBody);
-
-                // Extract Parameters
-                var promptTokens = responseJson.RootElement.GetProperty("usage").GetProperty("prompt_tokens").GetInt32();
-                var completionTokens = responseJson.RootElement.GetProperty("usage").GetProperty("completion_tokens").GetInt32();
-                var messageContent = responseJson.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-                var finishReason = responseJson.RootElement.GetProperty("choices")[0].GetProperty("finish_reason").GetString();
-
-                if (finishReason == "length")
-                {
-                    Console.WriteLine("Cut off due to length constraints");
-                }
-
-                // Return the extracted values
-                return new DashScopeResponse
-                {
-                    PromptTokens = promptTokens,
-                    CompletionTokens = completionTokens,
-                    Content = messageContent,
-                };
+                Console.WriteLine("Cut off due to length constraints");
             }
+
+            return response;
         }
 
-        public async Task<AICompletionsResponse> AIFormatString(string inputInstructions, string inputString)
+        public AICompletionsResponse AIFormatString(string inputInstructions, string inputString)
         {
             string systemInstructions = $@"You are tasked with reformatting user's clipboard data. Use the user's instructions, and the content of their clipboard below to edit their clipboard content as they have requested it.
 
@@ -170,16 +112,22 @@ Output:
 ";
 
             string aiResponse = null;
+            Response<Completions> rawAIResponse = null;
             int apiRequestStatus = (int)HttpStatusCode.OK;
             try
             {
-                string openAIKey = GetKey();
-                DashScopeResponse rawAIResponse = await MakeQwenRequests(systemInstructions, userMessage, openAIKey);
-                aiResponse = rawAIResponse.Content;
+                rawAIResponse = this.GetAICompletion(systemInstructions, userMessage);
+                aiResponse = rawAIResponse.Value.Choices[0].Text;
 
-                int promptTokens = rawAIResponse.PromptTokens;
-                int completionTokens = rawAIResponse.CompletionTokens;
+                int promptTokens = rawAIResponse.Value.Usage.PromptTokens;
+                int completionTokens = rawAIResponse.Value.Usage.CompletionTokens;
                 PowerToysTelemetry.Log.WriteEvent(new Telemetry.AdvancedPasteGenerateCustomFormatEvent(promptTokens, completionTokens, _modelName));
+            }
+            catch (Azure.RequestFailedException error)
+            {
+                Logger.LogError("GetAICompletion failed", error);
+                PowerToysTelemetry.Log.WriteEvent(new Telemetry.AdvancedPasteGenerateCustomErrorEvent(error.Message));
+                apiRequestStatus = error.Status;
             }
             catch (Exception error)
             {
