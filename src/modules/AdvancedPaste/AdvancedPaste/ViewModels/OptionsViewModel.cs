@@ -20,6 +20,7 @@ using Microsoft.PowerToys.Settings.UI.Library;
 using Microsoft.PowerToys.Telemetry;
 using Microsoft.UI.Xaml;
 using Microsoft.Win32;
+using PowerToys.GPOWrapper;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using WinUIEx;
@@ -493,7 +494,7 @@ namespace AdvancedPaste.ViewModels
                 return string.Empty;
             }
 
-            var aiResponse = await Task.Run(() => aiHelper.AIFormatString(inputInstructions, currentClipboardText));
+            var aiResponse = await aiHelper.AIFormatString(inputInstructions, currentClipboardText);
 
             string aiOutput = aiResponse.Response;
             ApiRequestStatus = aiResponse.ApiRequestStatus;
